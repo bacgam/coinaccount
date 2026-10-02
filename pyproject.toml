@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coinaccount-local"
+version = "0.2.0"
+description = "A local-first exchange transaction ledger and evidence reporting tool"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=46,<51",
+    "Flask>=3.1,<4",
+    "Pillow>=12.3,<13",
+    "openpyxl>=3.1.5,<4",
+    "pypdf>=6.16,<7",
+    "python-dotenv>=1.1,<2",
+    "requests>=2.32,<3",
+    "tzdata>=2026.3,<2027",
+    "websockets>=17,<18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+backpack-bot = "backpack_bot.cli:main"
+backpack-tax = "backpack_tax.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+backpack_tax = ["templates/*.html", "static/*", "static/exchange-logos/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

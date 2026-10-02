@@ -1,0 +1,31 @@
+# 비밀 정보가 아닌 봇 동작 설정입니다.
+mode = "paper"
+market_type = "PERP"
+symbol = "BTC_USDC_PERP"
+database_path = "data/market_data.db"
+history_interval = "4h"
+history_days = 100
+paper_initial_balance = 1000
+paper_max_leverage = 3
+paper_daily_loss_limit_pct = 2
+paper_risk_per_trade_pct = 5
+paper_max_daily_entries = 10
+
+# 4시간봉 볼린저 하단 터치 + CCI 회복 롱 전략
+strategy = "bollinger_cci_long"
+strategy_interval = "4h"
+ema_fast_period = 50
+ema_slow_period = 200
+vwma_period = 100
+smc_swing_length = 50
+smc_require_ema_filter = false
+bollinger_period = 20
+bollinger_stddev_multiple = 2
+cci_period = 20
+atr_period = 14
+atr_stop_multiple = 2
+backtest_slippage_bps = 2
+margin_allocation_pct = 20
+position_notional_multiple = 3
+stop_loss_equity_pct = 5
+take_profit_margin_pct = 20
