@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}원장 검색 · 코인어카운트{% endblock %}
+{% block heading %}거래소별 취득가액 원장{% endblock %}
+{% block content %}
+<nav class="exchange-tabs">
+  {% for exchange_code, exchange_name in exchanges.items() %}<a href="{{ url_for('ledger', exchange=exchange_code) }}" class="{{ 'active' if exchange_code == selected_exchange }}">{{ exchange_name }}</a>{% endfor %}
+</nav>
+<section class="panel ledger-filter-panel">
+  <div><p class="eyebrow">LEDGER FILTER</p><h2>{{ total|group_number }}건</h2></div>
+  <form method="get" class="ledger-filter-form">
+    <input type="hidden" name="exchange" value="{{ selected_exchange }}">
+    <label>시작일<input type="date" name="start" value="{{ start_date }}"></label>
+    <label>종료일<input type="date" name="end" value="{{ end_date }}"></label>
+    <label>자산<input type="text" name="asset" value="{{ asset }}" placeholder="BTC"></label>
+    <label>TXID<input type="text" name="txid" value="{{ txid }}" placeholder="일부만 입력 가능"></label>
+    <label class="app-select-label">판정
+      <input type="hidden" name="status" value="{{ status }}" data-app-select-value>
+      <details class="app-select" data-app-select>
+        <summary data-app-select-summary>{{ '정규화 완료' if status == 'NORMALIZED' else '검토 필요' if status == 'NEEDS_REVIEW' else '계산 제외' if status == 'EXCLUDED' else '전체' }}</summary>
+        <div class="app-select-menu">
+          <button type="button" data-value="ALL">전체</button>
+          <button type="button" data-value="NORMALIZED">정규화 완료</button>
+          <button type="button" data-value="NEEDS_REVIEW">검토 필요</button>
+          <button type="button" data-value="EXCLUDED">계산 제외</button>
+        </div>
+      </details>
+    </label>
+    <button type="submit">검색</button><a href="{{ url_for('ledger', exchange=selected_exchange) }}">초기화</a>
+  </form>
+</section>
+<section class="panel table-panel">
+  <div class="panel-title"><div><p class="eyebrow">{{ selected_exchange }} LEDGER</p><h2>{{ selected_exchange_name }} 원장</h2></div><span class="muted">페이지당 100건</span></div>
+  {% if events %}<div class="table-wrap ledger-table-wrap"><table class="ledger-table"><thead><tr><th>UTC 시각</th><th>구분</th><th>자산</th><th>수량</th><th>금액</th><th>TXID</th><th>판정</th><th></th></tr></thead><tbody>
+  {% for event in events %}<tr><td>{{ event.occurred_at_utc[:19].replace('T', ' ') if event.occurred_at_utc else '-' }}</td><td>{{ event.event_type }}</td><td><strong>{{ event.asset or '-' }}</strong></td><td>{{ event.quantity|group_number }}</td><td>{{ (event.realized_pnl or event.gross_amount or '-')|group_number }}</td><td class="ledger-txid" title="{{ event.txid or '' }}">{{ event.txid or '-' }}</td><td>{{ '검토 필요' if event.classification_status == 'NEEDS_REVIEW' else '계산 제외' if event.classification_status == 'EXCLUDED' else '정규화 완료' }}</td><td><a class="ledger-detail-link" href="{{ url_for('ledger_detail', event_id=event.id) }}">상세</a></td></tr>{% endfor %}
+  </tbody></table></div>
+  <nav class="ledger-pagination">{% if page > 1 %}<a href="{{ url_for('ledger', exchange=selected_exchange, start=start_date, end=end_date, asset=asset, txid=txid, status=status, page=page-1) }}">이전</a>{% endif %}<span>{{ page }} / {{ total_pages }}</span>{% if page < total_pages %}<a href="{{ url_for('ledger', exchange=selected_exchange, start=start_date, end=end_date, asset=asset, txid=txid, status=status, page=page+1) }}">다음</a>{% endif %}</nav>
+  {% else %}<div class="empty"><strong>조건에 맞는 원장 이벤트가 없습니다.</strong><span>기간이나 필터를 바꿔 확인하세요.</span></div>{% endif %}
+</section>
+{% endblock %}

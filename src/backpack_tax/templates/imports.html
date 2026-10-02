@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}자료 가져오기 · 코인어카운트{% endblock %}
+{% block heading %}거래소 자료 가져오기{% endblock %}
+{% block content %}
+<section class="grid-two import-grid">
+  <article class="panel">
+    <p class="eyebrow">IMMUTABLE SOURCE</p><h2>거래 자료 등록</h2>
+    <p class="muted">Backpack·업비트 원본은 별도 보관합니다. 빗썸 PDF는 개인정보를 제외한 비식별 거래 증빙만 보관하며 원본 PDF는 저장하지 않습니다.</p>
+    <form method="post" enctype="multipart/form-data" class="upload-form">
+      <label>출처<select name="source_type" id="source-type" required><option value="BACKPACK">Backpack</option><option value="UPBIT">업비트</option><option value="BITHUMB">빗썸</option></select></label>
+      <label id="document-type-wrap">자료 종류<select name="document_type" id="document-type" required><option value="DEPOSITS" data-sources="BACKPACK BITHUMB">입금</option><option value="WITHDRAWALS" data-sources="BACKPACK BITHUMB">출금</option><option value="TRADES" data-sources="BACKPACK">현물 거래</option><option value="FUTURES" data-sources="BACKPACK">선물</option><option value="SETTLEMENTS" data-sources="BACKPACK">정산</option><option value="BALANCES" data-sources="BACKPACK">잔액</option><option value="LENDING" data-sources="BACKPACK">렌딩</option><option value="VAULT" data-sources="BACKPACK">볼트</option><option value="TRANSACTIONS" data-sources="UPBIT BITHUMB">거래내역</option></select></label>
+      <label><span id="source-file-label">CSV 파일</span><input type="file" name="source_file" id="source-file" accept=".csv,text/csv" required><small id="source-file-help">Backpack에서 내보낸 원본 CSV를 선택하세요.</small></label>
+      <label id="pdf-password-wrap" hidden><span id="pdf-password-label">PDF 비밀번호</span><input type="password" name="pdf_password" id="pdf-password" autocomplete="off"><small id="pdf-password-help">문서를 여는 동안만 사용하며 저장하지 않습니다.</small></label>
+      <button type="submit" id="upload-submit">원본 CSV 저장</button>
+    </form>
+  </article>
+  <article class="panel guide">
+    <p class="eyebrow">SECURITY</p><h2>업로드 전 확인</h2>
+    <ul><li>업비트 PDF 비밀번호는 문서를 여는 동안만 사용하고 저장하지 않습니다.</li><li>빗썸 PDF는 비밀번호 없이 처리하며 고객명·계정·생년월일·은행 계좌번호·입출금 메모를 저장하지 않습니다.</li><li>API Secret·지갑 개인키·시드 문구는 절대 필요하지 않습니다.</li><li>업로드 파일의 SHA-256으로 중복을 차단하고 거래소별 원장으로 분리합니다.</li></ul>
+  </article>
+</section>
+<section class="panel table-panel">
+  <div class="panel-title archive-panel-title">
+    <div><p class="eyebrow">{{ 'RECYCLE BIN' if view_mode == 'trash' else 'SOURCE ARCHIVE' }}</p><h2>{{ '휴지통' if view_mode == 'trash' else '보관된 자료' }}</h2></div>
+  </div>
+  <div class="archive-table-actions">
+    {% if view_mode != 'trash' %}<a href="{{ url_for('import_conflicts') }}">가져오기 충돌 해결함</a>{% endif %}
+    {% if view_mode == 'trash' %}<a href="{{ url_for('imports_page') }}">보관된 자료</a>{% else %}<a href="{{ url_for('imports_page', view='trash') }}">휴지통</a>{% endif %}
+  </div>
+  {% if source_files %}
+  <div class="table-wrap"><table class="source-archive-table"><thead><tr><th>출처</th><th>종류</th><th>파일명</th><th>항목</th><th>크기</th><th>SHA-256</th><th>{{ '삭제 시각' if view_mode == 'trash' else '가져온 시각' }}</th><th></th><th class="delete-column" aria-label="삭제"></th></tr></thead><tbody>
+  {% for file in source_files %}<tr>
+    <td><span class="source {{ file.source_type|lower }}">{{ file.source_type }}</span></td><td>{{ file.document_type }}</td><td>{{ file.original_filename }}</td><td>{{ file.row_count }}</td><td>{{ '{:,.1f}'.format(file.byte_size / 1024) }} KB</td><td><code>{{ file.sha256[:12] }}…</code></td><td>{{ (file.deleted_at_utc if view_mode == 'trash' else file.imported_at_utc)[:19].replace('T', ' ') }} UTC</td>
+    <td>{% if view_mode == 'trash' %}<form method="post" action="{{ url_for('restore_source', file_id=file.id) }}" class="restore-source-form"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit" class="restore-source-button">복구</button></form>{% else %}<a href="{{ url_for('download_source', file_id=file.id) }}">{{ '비식별 자료 받기' if file.status == 'SANITIZED_IMPORTED' else '원본 받기' }}</a>{% endif %}</td>
+    <td class="delete-column">
+      {% if view_mode == 'trash' %}
+      <form method="post" action="{{ url_for('permanently_delete_source', file_id=file.id) }}" class="delete-source-form" onsubmit="return confirm('이 자료와 모든 원장 데이터를 영구삭제할까요? 이 작업은 복구할 수 없습니다.');"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit" class="delete-source-button permanent" title="영구삭제" aria-label="{{ file.original_filename }} 영구삭제">×</button></form>
+      {% else %}
+      <form method="post" action="{{ url_for('delete_source', file_id=file.id) }}" class="delete-source-form" onsubmit="return confirm('이 원장을 휴지통으로 이동할까요? 휴지통에서 다시 복구할 수 있습니다.');"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit" class="delete-source-button" title="휴지통으로 이동" aria-label="{{ file.original_filename }} 휴지통으로 이동">×</button></form>
+      {% endif %}
+    </td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty compact"><strong>{{ '휴지통이 비어 있습니다.' if view_mode == 'trash' else '보관된 원본 파일이 없습니다.' }}</strong></div>{% endif %}
+</section>
+<script>
+const source = document.getElementById("source-type");
+const documentType = document.getElementById("document-type");
+const documentTypeWrap = document.getElementById("document-type-wrap");
+const sourceFile = document.getElementById("source-file");
+const sourceFileLabel = document.getElementById("source-file-label");
+const sourceFileHelp = document.getElementById("source-file-help");
+const pdfPasswordWrap = document.getElementById("pdf-password-wrap");
+const pdfPasswordLabel = document.getElementById("pdf-password-label");
+const pdfPasswordHelp = document.getElementById("pdf-password-help");
+const pdfPassword = document.getElementById("pdf-password");
+const uploadSubmit = document.getElementById("upload-submit");
+function filterDocumentTypes() {
+  let firstVisible = null;
+  for (const option of documentType.options) {
+    const visible = option.dataset.sources.split(" ").includes(source.value);
+    option.hidden = !visible;
+    option.disabled = !visible;
+    if (visible && firstVisible === null) firstVisible = option;
+  }
+  if (documentType.selectedOptions[0]?.disabled && firstVisible) firstVisible.selected = true;
+}
+function updateSourceMode() {
+  const isUpbit = source.value === "UPBIT";
+  const isBithumb = source.value === "BITHUMB";
+  const usesStatementPdf = isUpbit || isBithumb;
+  documentTypeWrap.hidden = usesStatementPdf;
+  if (usesStatementPdf) documentType.value = "TRANSACTIONS";
+  sourceFile.accept = usesStatementPdf ? ".pdf,application/pdf" : ".csv,text/csv";
+  sourceFileLabel.textContent = isUpbit
+    ? "이메일로 받은 업비트 거래내역서 PDF"
+    : isBithumb
+      ? "빗썸 거래내역확인서 PDF"
+      : "CSV 파일";
+  sourceFileHelp.textContent = isUpbit
+    ? "업비트에서 이메일로 받은 암호화된 PDF 원본을 선택하세요."
+    : isBithumb
+      ? "비밀번호 입력은 필요하지 않습니다. 개인정보를 제거한 거래 데이터만 저장합니다."
+      : `${source.selectedOptions[0].textContent}에서 내보낸 원본 CSV를 선택하세요.`;
+  pdfPasswordWrap.hidden = !isUpbit;
+  pdfPasswordLabel.textContent = "업비트 PDF 비밀번호";
+  pdfPasswordHelp.textContent = "이메일로 받은 PDF의 비밀번호를 입력하세요. 저장하지 않습니다.";
+  pdfPassword.required = isUpbit;
+  uploadSubmit.textContent = isUpbit
+    ? "업비트 PDF 원장 가져오기"
+    : isBithumb
+      ? "빗썸 PDF 원장 가져오기"
+      : "원본 CSV 저장";
+  if (!isUpbit) pdfPassword.value = "";
+}
+source.addEventListener("change", () => {
+  sourceFile.value = "";
+  filterDocumentTypes();
+  updateSourceMode();
+});
+filterDocumentTypes();
+updateSourceMode();
+</script>
+{% endblock %}

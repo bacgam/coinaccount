@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}자산별 손익 · 코인어카운트{% endblock %}
+{% block heading %}자산별 거래량과 PNL{% endblock %}
+{% block content %}
+<nav class="exchange-tabs" aria-label="거래소별 자산 손익 선택">
+  {% for exchange_code, exchange_name in exchanges.items() %}
+  <a href="{{ url_for('assets', exchange=exchange_code, year=period.year_value, month=period.month_value, week=period.week_value, day=period.day_value) }}" class="{{ 'active' if exchange_code == selected_exchange }}"{% if exchange_code == selected_exchange %} aria-current="page"{% endif %}>{{ exchange_name }}</a>
+  {% endfor %}
+</nav>
+<section class="notice"><strong>{{ selected_exchange_name }} 실현손익 기준</strong><span>현물·주식은 이동평균 취득가, 선물은 종료 포지션 손익과 펀딩을 사용합니다. 금액 단위는 {{ currency_code }}이며 수수료는 PNL에서 빼지 않고 별도로 표시합니다.</span></section>
+<section class="panel period-panel">
+  <div><p class="eyebrow">PERIOD FILTER</p><h2>{{ period.label }}</h2><p class="muted">한국시간 기준 · 종료 시각은 다음 기간 시작 직전까지 포함</p></div>
+  <form method="get" action="{{ url_for('assets') }}" class="period-form">
+    <input type="hidden" name="exchange" value="{{ selected_exchange }}">
+    <label>년도<select name="year" id="filter-year"><option value="">전체 기간</option>{% for year in year_options %}<option value="{{ year }}" {{ 'selected' if period.year_value == year|string }}>{{ year }}년</option>{% endfor %}</select></label>
+    <label>월<select name="month" id="filter-month"><option value="">월 전체</option>{% for month in range(12, 0, -1) %}<option value="{{ month }}" {{ 'selected' if period.month_value == month|string }}>{{ month }}월</option>{% endfor %}</select></label>
+    <label>주간<select name="week" id="filter-week"><option value="">주간 생략</option>{% for value, label in week_options %}<option value="{{ value }}" {{ 'selected' if period.week_value == value|string }}>{{ label }}</option>{% endfor %}</select></label>
+    <label>일<select name="day" id="filter-day"><option value="">일 생략</option>{% for day in day_options %}<option value="{{ day }}" {{ 'selected' if period.day_value == day|string }}>{{ day }}일</option>{% endfor %}</select></label>
+    <button type="submit">기간 적용</button><button type="submit" class="export-button" formaction="{{ url_for('export_assets_excel') }}">Excel Export</button><a href="{{ url_for('assets', exchange=selected_exchange) }}">초기화</a>
+  </form>
+</section>
+<section class="period-summary">
+  <article><span>자산</span><strong>{{ summary.asset_count }}</strong><small>거래 발생 자산</small></article>
+  <article><span>거래량</span><strong>{{ summary.volume }}</strong><small>{{ currency_code }}</small></article>
+  <article><span>누적 PNL</span><strong>{{ summary.pnl }}</strong><small>{{ currency_code }} · 수수료 제외</small></article>
+  <article><span>수수료</span><strong>{{ summary.fees }}</strong><small>{{ currency_code }} · 별도 합계</small></article>
+</section>
+<section class="panel table-panel asset-performance">
+  <div class="panel-title"><div><p class="eyebrow">{{ selected_exchange }} ASSET PERFORMANCE</p><h2>{{ selected_exchange_name }} 코인·토큰화 주식</h2></div><span class="muted">거래량·PNL·수수료: {{ currency_code }}</span></div>
+  {% if assets %}<div class="table-wrap"><table><thead><tr><th>이름</th><th>거래량 ({{ currency_code }})</th><th>누적 매수액 ({{ currency_code }})</th><th>누적 매도액 ({{ currency_code }})</th><th>누적 PNL ({{ currency_code }})</th><th>수수료 ({{ currency_code }})</th></tr></thead><tbody>
+  {% for item in assets %}<tr>
+    <td><strong>{{ item.name }}</strong><small class="asset-meta">{{ item.asset }} · {{ item.instrument_label }}</small>{% if item.has_airdrop_activity %}<small class="asset-meta">에어드랍: {{ item.airdrop_quantity_display }} · 취득가 {{ currency_symbol }} {{ item.airdrop_cost_display }}</small>{% endif %}{% if item.has_external_acquisition_activity %}<small class="asset-meta">외부취득·기초잔고: {{ item.external_acquisition_quantity_display }} · 취득가 {{ currency_symbol }} {{ item.external_acquisition_cost_display }}</small>{% endif %}{% if item.has_transfer_activity %}<small class="asset-meta">내부 이동: 입금 {{ item.transfer_in_display }} · 출금 {{ item.transfer_out_display }}</small>{% endif %}{% if item.has_pending_transfer_basis %}<small class="basis-warning">가격 증빙 대기 {{ item.pending_transfer_basis_display }}</small>{% endif %}</td>
+    <td>{{ item.volume_display }}</td>
+    <td>{{ currency_symbol }} {{ item.buy_amount_display }}</td>
+    <td>{{ currency_symbol }} {{ item.sell_amount_display }}</td>
+    <td><strong class="money {{ item.pnl_class }}">{{ currency_symbol }} {{ item.pnl_display }}</strong>{% if item.has_unknown_basis %}<small class="basis-warning">취득가 미확인 매도 {{ item.unknown_basis_display }}</small>{% endif %}</td>
+    <td>{{ currency_symbol }} {{ item.fee_display }}{% if item.transfer_fee_quantity > 0 %}<small class="asset-meta">네트워크 {{ item.transfer_fee_display }} {{ item.asset }} · 원가 {{ item.transfer_fee_cost_display }}</small>{% endif %}</td>
+  </tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty compact"><strong>{{ selected_exchange_name }}에서 표시할 거래가 없습니다.</strong></div>{% endif %}
+</section>
+<script>
+const yearSelect = document.getElementById("filter-year");
+const monthSelect = document.getElementById("filter-month");
+const weekSelect = document.getElementById("filter-week");
+const daySelect = document.getElementById("filter-day");
+
+function rebuildWeekAndDay() {
+  const year = Number(yearSelect.value);
+  const month = Number(monthSelect.value);
+  const enabled = Boolean(year && month);
+  weekSelect.disabled = !enabled;
+  daySelect.disabled = !enabled;
+  if (!enabled) {
+    weekSelect.value = "";
+    daySelect.value = "";
+    return;
+  }
+  const selectedWeek = weekSelect.value;
+  const selectedDay = daySelect.value;
+  const lastDay = new Date(year, month, 0).getDate();
+  weekSelect.replaceChildren(new Option("주간 생략", ""));
+  for (let week = 5; week >= 1; week--) {
+    const start = (week - 1) * 7 + 1;
+    if (start > lastDay) continue;
+    const end = Math.min(start + 6, lastDay);
+    weekSelect.add(new Option(`${start}일 ~ ${end}일`, String(week)));
+  }
+  daySelect.replaceChildren(new Option("일 생략", ""));
+  for (let day = lastDay; day >= 1; day--) {
+    daySelect.add(new Option(`${day}일`, String(day)));
+  }
+  if ([...weekSelect.options].some(option => option.value === selectedWeek)) weekSelect.value = selectedWeek;
+  if ([...daySelect.options].some(option => option.value === selectedDay)) daySelect.value = selectedDay;
+}
+
+function updateHierarchy() {
+  const hasYear = Boolean(yearSelect.value);
+  monthSelect.disabled = !hasYear;
+  if (!hasYear) monthSelect.value = "";
+  rebuildWeekAndDay();
+}
+
+yearSelect.addEventListener("change", () => {
+  monthSelect.value = "";
+  weekSelect.value = "";
+  daySelect.value = "";
+  updateHierarchy();
+});
+monthSelect.addEventListener("change", () => {
+  weekSelect.value = "";
+  daySelect.value = "";
+  rebuildWeekAndDay();
+});
+weekSelect.addEventListener("change", () => { if (weekSelect.value) daySelect.value = ""; });
+daySelect.addEventListener("change", () => { if (daySelect.value) weekSelect.value = ""; });
+updateHierarchy();
+</script>
+{% endblock %}

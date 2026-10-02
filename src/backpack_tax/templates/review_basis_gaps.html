@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}취득가 누락 해결 · 코인어카운트{% endblock %}
+{% block heading %}취득가 누락 해결{% endblock %}
+{% block content %}
+<section class="notice"><strong>PNL 취득 물량 확인</strong><span>매도 시점에 원장에서 찾지 못한 취득 물량을 거래소·자산별로 모았습니다. 실제 분류와 취득가 입력은 검토센터 한 곳에서 처리합니다.</span></section>
+<section class="basis-gap-summary"><article><span>문제 자산</span><strong>{{ summary.asset_count|group_number }}</strong><small>거래소·자산 조합</small></article><article><span>관련 입금 후보</span><strong>{{ summary.candidate_count|group_number }}</strong><small>입금·에어드랍 기록</small></article><article><span>판정 대기 후보</span><strong>{{ summary.pending_count|group_number }}</strong><small>검토센터에서 처리 가능</small></article></section>
+<section class="panel table-panel basis-gap-table">
+  <div class="panel-title"><div><p class="eyebrow">ACQUISITION BASIS GAPS</p><h2>취득가 미확인 매도</h2></div><span class="muted">누적 매도액은 취득가 미확인 물량에 대응하는 매도금액 합계입니다.</span></div>
+  {% if summary.gaps %}<div class="table-wrap"><table><thead><tr><th>거래소</th><th>자산</th><th>취득가 미확인 수량</th><th>누적 매도액</th><th>관련 입금</th><th>판정 대기</th><th>가격 미확인</th><th></th></tr></thead><tbody>
+  {% for gap in summary.gaps %}<tr><td><span class="source {{ gap.source_type|lower }}">{{ gap.source_type }}</span></td><td><strong>{{ gap.asset }}</strong><small>{{ gap.instrument_label }}</small></td><td><strong>{{ gap.unknown_quantity_display }}</strong></td><td>{{ gap.unknown_amount_display }} {{ 'USD' if gap.source_type == 'BACKPACK' else 'KRW' }}</td><td>{{ gap.candidate_count|group_number }}</td><td>{{ gap.pending_count|group_number }}</td><td>{{ gap.unpriced_count|group_number }}</td><td><a href="{{ url_for('reviews', status='PENDING', source=gap.source_type, event_type='DEPOSIT', asset=gap.asset) }}">검토센터에서 해결</a></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty"><strong>취득가가 누락된 매도가 없습니다.</strong><span>현재 정규화된 원장에서 모든 매도 물량의 취득가를 찾았습니다.</span></div>{% endif %}
+</section>
+<div class="health-footer-actions"><a href="{{ url_for('reviews', status='PENDING') }}">검토센터로 이동</a><a href="{{ url_for('review_health') }}" class="outline">데이터 건강검진</a></div>
+{% endblock %}

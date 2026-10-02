@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}지갑주소 등록 · 코인어카운트{% endblock %}
+{% block heading %}지갑주소 등록{% endblock %}
+{% block content %}
+<section class="notice"><strong>지갑 주소록</strong><span>개인 지갑과 거래소 입출금 주소를 미리 등록해 주소를 혼동하지 않고 관리할 수 있습니다.</span></section>
+<section class="grid-two account-grid">
+  <article class="panel account-register-panel"><p class="eyebrow">PERSONAL WALLET</p><h2>개인 지갑 등록</h2>
+    <form method="post" class="account-form">
+      <input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}">
+      <label>지갑 이름<input name="wallet_name" maxlength="100" required placeholder="예: MetaMask 메인, Ledger 콜드월렛"></label>
+      <label>네트워크<select name="network_name" required><option value="">선택하세요</option>{% for key, network in networks.items() %}<option value="{{ key }}">{{ network[0] }}</option>{% endfor %}</select></label>
+      <label>개인 지갑 주소<input name="wallet_address" maxlength="300" required placeholder="0x…, Solana 주소 또는 Bitcoin 주소"></label>
+      <label>메모<input name="note" maxlength="500" placeholder="용도나 보관 위치 (선택)"></label>
+      <button type="submit">지갑 등록</button>
+    </form>
+  </article>
+  <article class="panel account-register-panel"><p class="eyebrow">EXCHANGE WALLET</p><h2>거래소 지갑 등록</h2>
+    <form method="post" action="{{ url_for('create_exchange_account') }}" class="account-form">
+      <input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}">
+      <label>거래소<select name="exchange_code" required><option value="">선택하세요</option>{% for code, name in wallet_exchanges.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select></label>
+      <label>네트워크<select name="network_name" required><option value="">선택하세요</option>{% for key, network in networks.items() %}<option value="{{ key }}">{{ network[0] }}</option>{% endfor %}</select></label>
+      <label>거래소 지갑 주소<input name="wallet_address" maxlength="300" required placeholder="거래소에 표시된 입금 또는 출금 주소"></label>
+      <label>메모<input name="note" maxlength="500" placeholder="자산·용도 또는 확인 내용 (선택)"></label>
+      <button type="submit">거래소 지갑 등록</button>
+    </form>
+  </article>
+</section>
+<section class="panel account-guide account-network-guide"><p class="eyebrow">NETWORK FAMILY</p><h2>네트워크 선택 안내</h2><dl><div><dt>EVM 계열 (0x 주소)</dt><dd>Ethereum, Base, Ink, Robinhood, Arbitrum 등 EVM 호환 체인</dd></div><div><dt>Solana (SVM)</dt><dd>Solana 계열 지갑 주소</dd></div><div><dt>Bitcoin</dt><dd>비트코인 전용 주소</dd></div></dl><p>거래소 주소는 같은 자산이라도 선택한 네트워크에 따라 달라질 수 있으므로 거래소 화면의 네트워크를 반드시 확인하세요.</p></section>
+<section class="grid-two account-lists">
+<article class="panel account-list-panel"><div class="panel-title"><div><p class="eyebrow">MY WALLETS</p><h2>등록된 개인 지갑</h2></div><span class="muted">{{ wallets|length|group_number }}개</span></div>
+{% if wallets %}<div class="account-wallet-list">{% for wallet in wallets %}<article><div><strong>{{ wallet.wallet_name }}</strong><span>{{ networks.get(wallet.network_name, (wallet.network_name, wallet.network_family))[0] }}</span><div class="account-wallet-address"><code>{{ wallet.wallet_address }}</code><button type="button" class="wallet-copy-button" data-copy-address="{{ wallet.wallet_address }}" aria-label="{{ wallet.wallet_name }} 지갑주소 복사" title="지갑주소 복사"><i aria-hidden="true"></i></button></div>{% if wallet.note %}<small>{{ wallet.note }}</small>{% endif %}</div><form method="post" action="{{ url_for('delete_account', account_id=wallet.id) }}" onsubmit="return confirm('이 주소록 항목을 삭제할까요? 기존 판정 이력은 유지됩니다.');"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit">삭제</button></form></article>{% endfor %}</div>{% else %}<div class="empty compact"><strong>등록된 개인 지갑이 없습니다.</strong><span>위 입력란에서 자주 사용하는 지갑을 먼저 등록하세요.</span></div>{% endif %}
+</article>
+<article class="panel account-list-panel"><div class="panel-title"><div><p class="eyebrow">EXCHANGE WALLETS</p><h2>등록된 거래소 지갑</h2></div><span class="muted">{{ exchange_wallets|length|group_number }}개</span></div>
+{% if exchange_wallets %}<div class="account-wallet-list">{% for wallet in exchange_wallets %}<article><div><strong>{{ wallet.exchange_name }}</strong><span>{{ networks.get(wallet.network_name, (wallet.network_name, wallet.network_family))[0] }}</span><div class="account-wallet-address"><code>{{ wallet.wallet_address }}</code><button type="button" class="wallet-copy-button" data-copy-address="{{ wallet.wallet_address }}" aria-label="{{ wallet.exchange_name }} 지갑주소 복사" title="지갑주소 복사"><i aria-hidden="true"></i></button></div>{% if wallet.note %}<small>{{ wallet.note }}</small>{% endif %}</div><form method="post" action="{{ url_for('delete_exchange_account', account_id=wallet.id) }}" onsubmit="return confirm('등록한 거래소 지갑 주소를 삭제할까요?');"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit">삭제</button></form></article>{% endfor %}</div>{% else %}<div class="empty compact"><strong>등록된 거래소 지갑이 없습니다.</strong><span>위 입력란에서 자주 사용하는 거래소 주소를 등록하세요.</span></div>{% endif %}
+</article>
+</section>
+{% endblock %}

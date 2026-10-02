@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}코인어카운트{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tax.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='backpack.css') }}">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="{{ url_for('dashboard') }}">
+        <span class="brand-mark">
+          <img src="{{ url_for('static', filename='coinaccount-logo-v3.png') }}" alt="코인어카운트 CA 로고">
+        </span>
+        <span><strong>코인어카운트</strong><small>Tax Ledger</small></span>
+      </a>
+      <nav>
+        <a class="{{ 'active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}">대시보드</a>
+        <a class="{{ 'active' if request.endpoint in ('imports_page', 'import_conflicts') }}" href="{{ url_for('imports_page') }}">자료 가져오기</a>
+        <a class="{{ 'active' if request.endpoint in ('reviews', 'review_decision', 'review_health', 'review_transfers', 'apply_review_transfers') }}" href="{{ url_for('reviews') }}">검토 센터</a>
+        <a class="{{ 'active' if request.endpoint == 'ledger' }}" href="{{ url_for('ledger') }}">취득가액 원장</a>
+        <a class="{{ 'active' if request.endpoint in ('accounts_page', 'delete_account', 'create_exchange_account', 'delete_exchange_account') }}" href="{{ url_for('accounts_page') }}">지갑주소 등록</a>
+        <a class="{{ 'active' if request.endpoint == 'assets' }}" href="{{ url_for('assets') }}">자산별 손익</a>
+        <a class="{{ 'active' if request.endpoint == 'reports' }}" href="{{ url_for('reports') }}">보고서 추출</a>
+      </nav>
+      <div class="local-badge"><span></span> {{ '누구나 둘러보는 공개 데모' if config.PUBLIC_DEMO else '이 PC에서만 실행 중' }}</div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">{{ '코인어카운트 · 공개 데모' if config.PUBLIC_DEMO else '한국 거주 개인 · 로컬 원장' }}</p><h1>{% block heading %}{% endblock %}</h1></div>
+        <div class="readonly">{{ '샘플 데이터 · 보기 전용' if config.PUBLIC_DEMO else '읽기·증빙 전용' }}</div>
+      </header>
+      {% if config.PUBLIC_DEMO %}
+      <section class="notice"><strong>공개 데모</strong><span>모든 거래와 시세는 가상 샘플입니다. 원장·손익을 둘러보고 보고서를 내려받을 수 있습니다. 자료 업로드와 수정은 제공하지 않습니다.</span></section>
+      {% endif %}
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='app-ui.js') }}" defer></script>
+  {% if config.PUBLIC_DEMO %}<script src="{{ url_for('static', filename='demo.js') }}" defer></script>{% endif %}
+</body>
+</html>

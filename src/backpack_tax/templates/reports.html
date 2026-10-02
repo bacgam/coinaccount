@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}보고서 추출 · 코인어카운트{% endblock %}
+{% block heading %}보고서 추출{% endblock %}
+{% block content %}
+<section class="notice"><strong>관리용 손익계산서</strong><span>거래소 원장을 기준으로 기간 손익을 미리 확인한 뒤 Excel로 추출합니다. 세금은 자동 계산하지 않으며 신고용 확정 전 전문가 검토가 필요합니다.</span></section>
+<section class="panel period-panel report-filter-panel">
+  <div><p class="eyebrow">REPORT FILTER</p><h2>{{ selected_exchange_name }} · {{ period.label }}</h2><p class="muted">한국시간 기준 · 거래소별 기준 통화로 계산</p></div>
+  <form method="get" action="{{ url_for('reports') }}" class="period-form report-period-form">
+    <label>거래소<select name="exchange" id="filter-exchange">{% for exchange_code, exchange_name in exchanges.items() %}<option value="{{ exchange_code }}" {{ 'selected' if selected_exchange == exchange_code }}>{{ exchange_name }}</option>{% endfor %}</select></label>
+    <label>년도<select name="year" id="filter-year"><option value="">전체 기간</option>{% for year in year_options %}<option value="{{ year }}" {{ 'selected' if period.year_value == year|string }}>{{ year }}년</option>{% endfor %}</select></label>
+    <label>월<select name="month" id="filter-month"><option value="">월 전체</option>{% for month in range(12, 0, -1) %}<option value="{{ month }}" {{ 'selected' if period.month_value == month|string }}>{{ month }}월</option>{% endfor %}</select></label>
+    <label>주간<select name="week" id="filter-week"><option value="">주간 생략</option>{% for value, label in week_options %}<option value="{{ value }}" {{ 'selected' if period.week_value == value|string }}>{{ label }}</option>{% endfor %}</select></label>
+    <label>일<select name="day" id="filter-day"><option value="">일 생략</option>{% for day in day_options %}<option value="{{ day }}" {{ 'selected' if period.day_value == day|string }}>{{ day }}일</option>{% endfor %}</select></label>
+    <button type="submit">미리보기 적용</button>
+    <button type="submit" class="export-button" formaction="{{ url_for('export_income_statement_excel') }}">확인한 내용 Excel 추출</button>
+    <a href="{{ url_for('reports', exchange=selected_exchange) }}">초기화</a>
+  </form>
+</section>
+
+<section class="panel income-statement-panel">
+  <div class="income-statement-preview">
+    <header class="income-statement-heading">
+      <p>관 리 용</p>
+      <h2>손 익 계 산 서</h2>
+      <strong>{{ period.label }}</strong>
+      <span>{{ selected_exchange_name }} · 단위: {{ currency_code }}</span>
+    </header>
+    <div class="income-statement-lines">
+      {% for line in statement.lines %}
+      <div class="income-statement-row{{ ' subtotal' if line.subtotal }}{{ ' final' if line.final }}">
+        <span class="income-roman">{{ line.roman }}</span>
+        <strong>{{ line.label }}</strong>
+        <span class="income-amount">{{ line.amount_display }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <footer class="income-statement-notes">
+      <p>현물·토큰화 주식은 이동평균 취득가, 선물은 종료 포지션 손익과 펀딩·이자를 반영했습니다.</p>
+      <p>거래·청산·내부 이동 네트워크 수수료는 별도 비용으로 차감했으며 세금은 0으로 두고 자동 계산하지 않았습니다.</p>
+      {% if statement.has_pending_transfer_basis %}<p class="report-warning">USD/USDT↔KRW 가격 증빙 대기 내부 이동: {% for item in statement.pending_transfer_basis %}{{ item.asset }} {{ item.quantity }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+      {% if statement.has_unknown_basis %}<p class="report-warning">취득가 미확인 매도금액 {{ statement.unknown_basis_display }} {{ currency_code }}는 실현손익에서 제외되어 추가 확인이 필요합니다.</p>{% endif %}
+    </footer>
+  </div>
+</section>
+
+<section class="panel table-panel report-basis-panel">
+  <div class="panel-title"><div><p class="eyebrow">CALCULATION BASIS</p><h2>페이지 내 산출 근거</h2></div><span class="muted">{{ asset_rows|length }}개 자산 · {{ currency_code }}</span></div>
+  {% if asset_rows %}<div class="table-wrap"><table><thead><tr><th>자산</th><th>상품유형</th><th>거래량</th><th>매수액</th><th>매도액</th><th>처분원가</th><th>실현손익</th><th>수수료</th><th>취득가 미확인 매도액</th></tr></thead><tbody>
+  {% for item in asset_rows %}<tr><td><strong>{{ item.asset }}</strong></td><td>{{ item.instrument_label }}</td><td>{{ item.volume_display }}</td><td>{{ item.buy_amount_display }}</td><td>{{ item.sell_amount_display }}</td><td>{{ '{:,.2f}'.format(item.realized_cost) }}</td><td><strong class="money {{ item.pnl_class }}">{{ item.pnl_display }}</strong></td><td>{{ item.fee_display }}</td><td>{{ item.unknown_basis_amount_display }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty compact"><strong>선택한 기간에 표시할 거래가 없습니다.</strong></div>{% endif %}
+</section>
+
+<script>
+const yearSelect = document.getElementById("filter-year");
+const monthSelect = document.getElementById("filter-month");
+const weekSelect = document.getElementById("filter-week");
+const daySelect = document.getElementById("filter-day");
+
+function rebuildWeekAndDay() {
+  const year = Number(yearSelect.value);
+  const month = Number(monthSelect.value);
+  const enabled = Boolean(year && month);
+  weekSelect.disabled = !enabled;
+  daySelect.disabled = !enabled;
+  if (!enabled) {
+    weekSelect.value = "";
+    daySelect.value = "";
+    return;
+  }
+  const selectedWeek = weekSelect.value;
+  const selectedDay = daySelect.value;
+  const lastDay = new Date(year, month, 0).getDate();
+  weekSelect.replaceChildren(new Option("주간 생략", ""));
+  for (let week = 5; week >= 1; week--) {
+    const start = (week - 1) * 7 + 1;
+    if (start > lastDay) continue;
+    const end = Math.min(start + 6, lastDay);
+    weekSelect.add(new Option(`${start}일 ~ ${end}일`, String(week)));
+  }
+  daySelect.replaceChildren(new Option("일 생략", ""));
+  for (let day = lastDay; day >= 1; day--) daySelect.add(new Option(`${day}일`, String(day)));
+  if ([...weekSelect.options].some(option => option.value === selectedWeek)) weekSelect.value = selectedWeek;
+  if ([...daySelect.options].some(option => option.value === selectedDay)) daySelect.value = selectedDay;
+}
+
+function updateHierarchy() {
+  const hasYear = Boolean(yearSelect.value);
+  monthSelect.disabled = !hasYear;
+  if (!hasYear) monthSelect.value = "";
+  rebuildWeekAndDay();
+}
+
+yearSelect.addEventListener("change", () => {
+  monthSelect.value = "";
+  weekSelect.value = "";
+  daySelect.value = "";
+  updateHierarchy();
+});
+monthSelect.addEventListener("change", () => {
+  weekSelect.value = "";
+  daySelect.value = "";
+  rebuildWeekAndDay();
+});
+weekSelect.addEventListener("change", () => { if (weekSelect.value) daySelect.value = ""; });
+daySelect.addEventListener("change", () => { if (daySelect.value) weekSelect.value = ""; });
+updateHierarchy();
+</script>
+{% endblock %}

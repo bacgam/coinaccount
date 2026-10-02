@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block title %}검토 센터 · 코인어카운트{% endblock %}
+{% block heading %}<span class="review-heading">검토 센터 <button type="button" id="review-help-open" class="review-help-trigger" aria-label="미지원 거래소 이동 안내 열기" aria-haspopup="dialog">?</button></span>{% endblock %}
+{% block content %}
+<dialog id="review-help-dialog" class="review-help-dialog" aria-labelledby="review-help-title">
+  <div class="review-help-header"><strong id="review-help-title">미지원 거래소 이동과 취득가 주의</strong><button type="button" id="review-help-close" aria-label="안내 닫기">×</button></div>
+  <div class="review-help-body">
+    <p>현재 Coinaccount가 직접 연결하는 거래소는 업비트·빗썸·Backpack입니다. 바이낸스 등 다른 해외거래소로 보낸 코인은 상대 거래소의 입금·매매 원장이 없으므로 이동 이후의 취득가 흐름을 자동으로 이어갈 수 없습니다.</p>
+    <ul>
+      <li>미지원 거래소 출금을 단순 정규화 승인해도 내부 이동 연결과 취득가 승계는 생성되지 않습니다.</li>
+      <li>해당 코인이 나중에 지원 거래소로 돌아와 매도되면 취득가 미확인 또는 부정확한 PNL이 발생할 수 있습니다.</li>
+      <li>관련 입출금은 무관한 거래와 연결하지 말고, 판정 메모에 거래소명과 이동 사실을 적고 TXID·원본 자료를 보존하세요.</li>
+      <li>향후 해당 거래소 자료를 지원하면 출금과 입금을 연결해 기존 취득가를 이어야 합니다.</li>
+    </ul>
+  </div>
+  <form method="dialog"><button type="submit" class="review-help-confirm">확인</button></form>
+</dialog>
+<section class="notice"><strong>판정 이력 보존</strong><span>자동 분류가 불확실한 이벤트를 확인하세요. 판정은 원본을 바꾸지 않으며 메모와 시각이 이력에 남습니다.</span></section>
+
+<nav class="review-collection-nav" aria-label="검토 모음 선택">
+  <a href="{{ url_for('reviews', status='PENDING') }}" class="{{ 'active' if not dust_only and not unpriced_only }}">전체 검토</a>
+  <a href="{{ url_for('reviews', status='ALL', dust=1) }}" class="dust {{ 'active' if dust_only }}">더스트 트렌젝션 <span>{{ statistics.dust_pending }}</span></a>
+  <a href="{{ url_for('reviews', status='PENDING', unpriced=1) }}" class="unpriced {{ 'active' if unpriced_only }}">가격 미확인 <span>{{ statistics.unpriced_pending }}</span></a>
+  <span class="review-utility-nav">
+    <a href="{{ url_for('review_health') }}" class="health">데이터 건강검진</a>
+    <a href="{{ url_for('review_basis_gaps') }}" class="health">취득가 누락 해결</a>
+  </span>
+</nav>
+{% if status_filter == 'PENDING' and not dust_only and not unpriced_only and smart_inbox.groups %}
+<section class="smart-review-inbox">
+  <div class="smart-review-header"><p class="eyebrow">SMART REVIEW INBOX</p><strong>스마트 검토 작업함</strong><span>{% if smart_inbox.actionable %}추천 처리 {{ smart_inbox.actionable|group_number }}건 · {% endif %}입출금은 묶음으로, 나머지는 분류별로 확인하세요</span></div>
+  <div class="smart-review-grid">
+  {% for group in smart_inbox.groups %}
+    <article class="smart-review-group {{ 'actionable' if group.actionable else 'manual' }}">
+      <header><span>{{ group.confidence }}</span><strong>{{ group.count|group_number }}건</strong></header>
+      <h3>{{ group.title }}</h3><p>{{ group.description }}</p>
+      <footer>
+        {% if group.actionable %}
+        <form method="post" action="{{ url_for('apply_smart_review', rule=group.key) }}" onsubmit="return confirm('{{ group.count }}건을 추천대로 처리할까요? 판정 이력과 PNL 원장에 반영됩니다.');"><input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><button type="submit">{{ group.count|group_number }}건 묶음 처리</button></form>
+        {% elif group.key == 'TRANSFER_REVIEW' %}<a href="{{ url_for('review_transfers') }}">{{ group.count|group_number }}건 묶어서 검토</a>
+        {% elif group.unpriced %}<a href="{{ url_for('reviews', status='PENDING', unpriced=1) }}">가격 미확인 보기</a>
+        {% else %}<a href="{{ url_for('reviews', status='PENDING', event_type=group.event_type) }}">대상 거래 보기</a>{% endif %}
+        <span>{{ 'PNL 변경 가능' if group.pnl_impact else 'PNL 직접 영향 없음' }}</span>
+      </footer>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if dust_only %}<section class="dust-guide"><div><strong>거래 시점 USD 평가액 1달러 미만</strong><span>저장된 원본 금액 또는 거래 시각의 1분봉 가격 증빙이 있는 코인 이벤트만 포함합니다. KRW는 원화 금액이 확정된 법정화폐이므로 더스트·가격 미확인 대상에서 제외합니다.</span></div><form method="post" action="{{ url_for('approve_dust_reviews') }}" onsubmit="return confirm('현재 거래소·이벤트 필터에 해당하는 검토 대기 더스트 트렌젝션을 모두 정규화 승인할까요? 각 항목에 판정 이력이 기록됩니다.');"><input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="source" value="{{ source_type }}"><input type="hidden" name="event_type" value="{{ event_type }}"><button type="submit" class="has-pnl-impact">검토 대기 일괄 승인</button></form></section>{% endif %}
+{% if unpriced_only %}<section class="dust-guide unpriced-guide"><div><strong>가격 증빙이 필요한 이벤트</strong><span>원 거래소 1분봉과 CoinGecko 인접 과거 시세를 순서대로 조회합니다. 그래도 가격이 없으면 각 카드에서 1개당 가격을 직접 입력할 수 있습니다. 가격이 확인된 에어드랍은 더스트 일괄 승인 시 취득가까지 함께 반영됩니다.</span></div><div class="review-guide-actions"><form id="valuation-refresh-form" method="post" action="{{ url_for('refresh_review_valuations') }}"><input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="source" value="{{ source_type }}"><input type="hidden" name="event_type" value="{{ event_type }}"><button type="submit">거래 시점 가격 채우기</button></form><form method="post" action="{{ url_for('approve_review_collection') }}" onsubmit="return confirm('현재 필터의 가격 미확인 검토 대기 이벤트를 가격 증빙 없이 모두 정규화 승인할까요? 가격이 없는 에어드랍은 취득가 확인을 위해 남습니다.');"><input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="collection" value="UNPRICED"><input type="hidden" name="source" value="{{ source_type }}"><input type="hidden" name="event_type" value="{{ event_type }}"><button type="submit" class="outline">가격 미확인 일괄 승인</button></form></div></section>{% endif %}
+
+<section class="panel review-filter-panel">
+  <div><p class="eyebrow">REVIEW FILTER</p><h2>{{ total|int }}개 이벤트</h2></div>
+  <form method="get" action="{{ url_for('reviews') }}" class="review-filter-form">
+    {% if dust_only %}<input type="hidden" name="dust" value="1">{% endif %}
+    {% if unpriced_only %}<input type="hidden" name="unpriced" value="1">{% endif %}
+    <label>상태<select name="status">
+      <option value="PENDING" {{ 'selected' if status_filter == 'PENDING' }}>검토 대기</option>
+      <option value="RESOLVED" {{ 'selected' if status_filter == 'RESOLVED' }}>검토 완료</option>
+      <option value="ALL" {{ 'selected' if status_filter == 'ALL' }}>전체</option>
+    </select></label>
+    <label>거래소<select name="source">
+      <option value="">전체 거래소</option>
+      {% for source in filter_options.sources %}<option value="{{ source }}" {{ 'selected' if source_type == source }}>{{ source }}</option>{% endfor %}
+    </select></label>
+    <label>이벤트<select name="event_type">
+      <option value="">전체 이벤트</option>
+      {% for value in filter_options.event_types %}<option value="{{ value }}" {{ 'selected' if event_type == value }}>{{ event_labels.get(value, value) }}</option>{% endfor %}
+    </select></label>
+    <label>자산<input type="text" name="asset" value="{{ asset }}" maxlength="40" placeholder="예: BTC, SOL"></label>
+    <button type="submit">필터 적용</button><a href="{{ url_for('reviews') }}">초기화</a>
+  </form>
+</section>
+
+{% if events %}
+<section class="review-list" data-selected-event="{{ event_id or '' }}">
+  {% for event in events %}
+  <details class="panel review-card {{ event.classification_status|lower }}" {% if event_id == event.id %}open{% endif %}>
+    <summary class="review-card-header">
+      <div class="review-identity">
+        <span class="source {{ event.source_type|lower }}">{{ event.source_type }}</span>
+        <div><p><strong>{{ event.asset or '자산 미확인' }}</strong>{% if event.quantity %} <span>{{ event.quantity|group_number }}</span>{% endif %}</p><small>{{ event_labels.get(event.event_type, event.event_type or '이벤트 미확인') }} · {{ event.occurred_at_utc[:19].replace('T', ' ') if event.occurred_at_utc else '시각 미확인' }} UTC</small></div>
+      </div>
+      <div class="review-status-group">{% if event.estimated_usd_value is not none and event.estimated_usd_value < 1 %}<span class="review-status dust">더스트 · ${{ '{:.4f}'.format(event.estimated_usd_value) }}</span>{% elif event.valuation_status == 'UNPRICED' or event.valuation_status is none %}<span class="review-status unpriced">가격 미확인</span>{% endif %}<span class="review-status {{ event.classification_status|lower }}">{% if event.classification_status == 'NEEDS_REVIEW' %}검토 필요{% elif event.classification_status == 'EXCLUDED' %}계산 제외{% else %}정규화 완료{% endif %}</span><span class="review-card-toggle">펼치기</span></div>
+    </summary>
+    <div class="review-card-body">
+
+    <p class="review-reason">{{ event.classification_reason or '자동 분류 근거가 없습니다.' }}</p>
+    {% if event.valuation_reason %}<p class="valuation-reason"><strong>금액 근거</strong> {{ event.valuation_reason }}{% if event.native_currency == 'KRW' %} · 확인 금액 ₩{{ '{:,.0f}'.format(event.native_value|float) }}{% elif event.estimated_usd_value is not none %} · 평가액 ${{ '{:.6f}'.format(event.estimated_usd_value) }}{% endif %}{% if event.valuation_confidence %} · 신뢰도 {{ event.valuation_confidence }}{% endif %}{% if event.valuation_source_url %} · <a href="{{ event.valuation_source_url }}" target="_blank" rel="noreferrer">시세 API 근거</a>{% endif %}</p>{% endif %}
+    <dl class="review-data-grid">
+      <div><dt>상품·방향</dt><dd>{{ event.market_symbol or event.network or '-' }}{% if event.side %} · {{ event.side }}{% endif %}</dd></div>
+      <div><dt>금액·가격</dt><dd>{{ event.gross_amount or '-' }}{% if event.unit_price %} · 단가 {{ event.unit_price }}{% endif %}</dd></div>
+      <div><dt>수수료</dt><dd>{{ event.fee_quantity|group_number if event.fee_quantity else '-' }} {{ event.fee_asset or '' }}</dd></div>
+      <div><dt>원본 위치</dt><dd>{% if event.source_file_id %}<a href="{{ url_for('download_source', file_id=event.source_file_id) }}">{{ event.original_filename }}</a> · {{ event.source_row_number }}행{% else %}직접 생성 이벤트{% endif %}</dd></div>
+    </dl>
+    {% if event.txid or event.from_address or event.to_address %}
+    <details class="review-chain-details"><summary>TXID·주소 보기</summary>
+      {% if event.txid %}<p><span>TXID</span><code>{{ event.txid }}</code></p>{% endif %}
+      {% if event.from_address %}<p><span>보낸 주소</span><code>{{ event.from_address }}</code></p>{% endif %}
+      {% if event.to_address %}<p><span>받는 주소</span><code>{{ event.to_address }}</code></p>{% endif %}
+    </details>
+    {% endif %}
+
+    {% if event.transfer_match %}
+    <div class="transfer-match-summary">
+      <strong>내부 이동 연결 #{{ event.transfer_match.id }}</strong>
+      <span>{{ event.transfer_match.withdrawal_source_type }} 출금 {{ event.transfer_match.withdrawal_quantity|group_number }} → {{ event.transfer_match.deposit_source_type }} 입금 {{ event.transfer_match.deposit_quantity|group_number }}</span>
+      <small>수량 차이 {{ event.transfer_match.fee_quantity|group_number }} {{ event.transfer_match.asset }} · {% if (event.transfer_match.withdrawal_source_type == 'BACKPACK') == (event.transfer_match.deposit_source_type == 'BACKPACK') %}동일 기준통화 취득가 승계 대상{% else %}USD/USDT↔KRW 가격 증빙 대기{% endif %}</small>
+    </div>
+    {% endif %}
+
+    {% if event.classification_status == 'NEEDS_REVIEW' and event.event_type != 'DEPOSIT' and (event.event_type == 'AIRDROP' or event.valuation_status == 'UNPRICED' or event.valuation_status is none) %}
+    <form method="post" action="{{ url_for('manual_event_price', event_id=event.id) }}" class="manual-price-form">
+      <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}">
+      <input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+      <div><strong>{{ '에어드랍 취득가 직접 입력' if event.event_type == 'AIRDROP' else '거래 시점 가격 직접 입력' }}</strong><small>자동 조회가 불가능한 경우 자산 1개당 가격을 입력하세요. {{ 'Backpack은 USD' if event.source_type == 'BACKPACK' else '국내 거래소는 KRW' }}로 저장되며 입력 이력이 보존됩니다.{% if event.event_type == 'AIRDROP' %} 실제로 무상 취득했다면 0을 입력할 수 있습니다.{% endif %}</small></div>
+      <label><span>1 {{ event.asset }} 가격 ({{ 'USD' if event.source_type == 'BACKPACK' else 'KRW' }})</span><input type="text" name="unit_price" inputmode="decimal" maxlength="60" required placeholder="예: {{ '0.25' if event.source_type == 'BACKPACK' else '1250' }}"></label>
+      <label><span>가격 근거·메모</span><input type="text" name="price_note" maxlength="500" placeholder="확인한 거래소, 자료 또는 계산 근거를 적으세요 (선택)"></label>
+      <button type="submit">{{ '취득가 저장 및 승인' if event.event_type == 'AIRDROP' else '수동 가격 저장' }}</button>
+    </form>
+    {% endif %}
+
+    {% if event.classification_status == 'NEEDS_REVIEW' and event.event_type == 'AIRDROP' %}
+    <div class="airdrop-basis-panel">
+      <div><strong>에어드랍 취득가 검토</strong><span>내부이동으로 연결하지 않습니다. 승인한 총 평가액이 수령 수량의 취득원가로 들어가 이후 매도의 이동평균 PNL에 반영됩니다.</span></div>
+      <div class="review-actions">
+        {% if event.valuation_status == 'VALUED' and (event.native_value is not none or (event.source_type == 'BACKPACK' and event.estimated_usd_value is not none)) %}
+        <form method="post" action="{{ url_for('confirm_airdrop_basis', event_id=event.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+          <input type="text" name="rationale" maxlength="500" placeholder="승인 메모 (선택)"><button type="submit">정규화 승인 · 취득가 반영</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('review_decision', event_id=event.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="decision" value="EXCLUDED"><input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+          <button type="submit" class="danger" onclick="return confirm('이 에어드랍을 계산 대상에서 제외할까요?');">계산 제외</button>
+        </form>
+      </div>
+    </div>
+    {% elif event.classification_status == 'NEEDS_REVIEW' %}
+    {% if event.event_type == 'DEPOSIT' %}
+    <form method="post" action="{{ url_for('classify_deposit_origin', event_id=event.id) }}" class="deposit-origin-form" data-deposit-origin-form>
+      <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}">
+      <input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_asset" value="{{ asset }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+      <div class="deposit-origin-heading"><strong>이 입금은 어디에서 생긴 물량인가요?</strong><span>분류에 따라 취득가 반영 방식이 달라집니다. 외부 매수·기초잔고는 입력한 원가로 새 로트를 만들고, 내부 이동은 연결한 출금의 기존 취득가를 승계합니다.</span></div>
+      <div class="deposit-origin-options">
+        <label><input type="radio" name="origin_type" value="EXTERNAL_PURCHASE" required><span><strong>외부 거래소에서 매수 후 입금</strong><small>바이낸스 등 다른 거래소에서 산 뒤 보낸 물량</small></span></label>
+        <label><input type="radio" name="origin_type" value="INTERNAL_TRANSFER" required><span><strong>내 지갑·거래소 간 이동</strong><small>내 출금과 연결해 기존 취득가를 그대로 승계</small></span></label>
+        <label><input type="radio" name="origin_type" value="AIRDROP" required><span><strong>에어드랍 분류·보상</strong><small>무상 지급 물량으로 바꾸고 취득가를 별도 승인</small></span></label>
+        <label><input type="radio" name="origin_type" value="OPENING_BALANCE" required><span><strong>기초잔고 또는 거래자료 누락</strong><small>이전 거래자료가 없어 사용자가 원가를 복원하는 물량</small></span></label>
+      </div>
+      <div class="deposit-origin-fields" data-origin-fields="EXTERNAL_PURCHASE OPENING_BALANCE" hidden>
+        <label><span>원래 매수한 거래소·지갑 또는 자료 출처</span><input type="text" name="origin_name" maxlength="100" placeholder="예: Binance, 개인 지갑, 2025년 기초잔고 자료"></label>
+        <label><span>원래 취득 시각 (UTC)</span><input type="datetime-local" name="acquired_at_utc" value="{{ event.occurred_at_utc[:16] if event.occurred_at_utc else '' }}"></label>
+        <div class="deposit-origin-cost-row">
+          <label><span>1 {{ event.asset }}당 취득가 ({{ 'USD' if event.source_type == 'BACKPACK' else 'KRW' }})</span><input type="text" name="unit_cost" inputmode="decimal" maxlength="60" placeholder="예: {{ '2.50' if event.source_type == 'BACKPACK' else '3500' }}"></label>
+          <label><span>취득 수수료 ({{ 'USD' if event.source_type == 'BACKPACK' else 'KRW' }})</span><input type="text" name="fee_cost" inputmode="decimal" maxlength="60" value="0"></label>
+        </div>
+        <small>전체 입금 수량 {{ event.quantity|group_number }} {{ event.asset }}에 적용합니다. 원래 취득 시각은 입금보다 늦을 수 없습니다.</small>
+      </div>
+      <div class="deposit-origin-fields" data-origin-fields="INTERNAL_TRANSFER" hidden>
+        <div class="internal-mode-options">
+          <label><input type="radio" name="internal_mode" value="LINKED" {% if event.transfer_candidates %}checked{% endif %}><span><strong>연결할 입출금 기록이 있음</strong><small>상대 출금을 선택해 취득가를 자동 승계합니다.</small></span></label>
+          <label><input type="radio" name="internal_mode" value="PERSONAL_WALLET" {% if not event.transfer_candidates %}checked{% endif %}><span><strong>개인 지갑 이동 · 상대 기록 없음</strong><small>지갑 이름으로 원장을 만들고 상대 이벤트 없이 승인합니다.</small></span></label>
+        </div>
+        <div data-internal-mode-fields="LINKED">
+        {% if event.transfer_candidates %}
+        <label><span>연결할 상대 출금</span><select name="counterparty_event_id">
+          <option value="">상대 출금을 선택하세요</option>
+          {% for candidate in event.transfer_candidates %}<option value="{{ candidate.id }}">{{ candidate.source_type }} · {{ candidate.quantity|group_number }} {{ candidate.asset }} · {{ candidate.occurred_at_utc[:16].replace('T', ' ') if candidate.occurred_at_utc else '시각 미확인' }} UTC · 차이 {{ candidate.fee_quantity|group_number }}{% if candidate.same_txid %} · TXID 일치{% endif %}{% if not candidate.basis_currency_compatible %} · 가격 증빙 필요{% endif %}</option>{% endfor %}
+        </select></label>
+        <small>동일 자산, 출금 이하 입금 수량, 7일 이내 이벤트를 가까운 순서로 제안합니다.</small>
+        {% else %}<p>연결 가능한 출금이 없습니다. 상대 거래소 자료를 먼저 가져온 뒤 다시 선택하세요.</p>{% endif %}
+        </div>
+        <div class="personal-wallet-fields" data-internal-mode-fields="PERSONAL_WALLET">
+          <label><span>등록한 지갑 선택</span><select name="wallet_account_id" data-wallet-account-select><option value="">직접 입력</option>{% for wallet in personal_wallets if wallet.id %}<option value="{{ wallet.id }}" data-wallet-name="{{ wallet.wallet_name }}" data-wallet-address="{{ wallet.wallet_address }}">{{ wallet.wallet_name }} · {{ wallet.network_name }} · {{ wallet.wallet_address }}</option>{% endfor %}</select><small><a href="{{ url_for('accounts_page') }}">지갑주소 등록에서 추가</a></small></label>
+          <label><span>개인 지갑 이름</span><input type="text" name="wallet_name" maxlength="100" placeholder="예: MetaMask 메인, Ledger 콜드월렛"></label>
+          <label><span>지갑 주소 (선택)</span><input type="text" name="wallet_address" maxlength="300" placeholder="같은 주소를 입력하면 이후 입출금 취득가를 이어줍니다."></label>
+          <fieldset class="wallet-basis-options"><legend>입금 물량의 취득가</legend>
+            <label><input type="radio" name="wallet_basis_mode" value="AUTO_CARRY" checked><span>기존 지갑 원가 승계</span></label>
+            <label><input type="radio" name="wallet_basis_mode" value="MANUAL_BASIS"><span>취득가 직접 입력</span></label>
+            <label><input type="radio" name="wallet_basis_mode" value="UNKNOWN"><span>취득가 미확인으로 승인</span></label>
+          </fieldset>
+          <div class="wallet-manual-basis" data-wallet-basis-fields="MANUAL_BASIS" hidden>
+            <label><span>1 {{ event.asset }}당 취득가 ({{ 'USD' if event.source_type == 'BACKPACK' else 'KRW' }})</span><input type="text" name="wallet_unit_cost" inputmode="decimal" maxlength="60" placeholder="예: {{ '2.50' if event.source_type == 'BACKPACK' else '3500' }}"></label>
+            <label><span>취득 수수료 ({{ 'USD' if event.source_type == 'BACKPACK' else 'KRW' }})</span><input type="text" name="wallet_fee_cost" inputmode="decimal" maxlength="60" value="0"></label>
+          </div>
+          <small>같은 지갑의 과거 출금 원가가 없으면 자동 승계를 선택해도 해당 수량은 취득가 미확인으로 남습니다.</small>
+        </div>
+      </div>
+      <div class="deposit-origin-fields" data-origin-fields="AIRDROP" hidden><p>에어드랍으로 전환한 다음 실제 무상 취득이면 취득가 0을 입력할 수 있습니다. 조회 가격을 취득가로 승인하는 것도 가능합니다.</p></div>
+      <label class="deposit-origin-note"><span>분류 근거·메모</span><input type="text" name="origin_note" maxlength="500" placeholder="확인한 거래소, 지갑 또는 증빙 내용을 적으세요 (선택)"></label>
+      <button type="submit" class="deposit-origin-submit">선택한 분류 적용</button>
+    </form>
+    {% elif event.event_type == 'WITHDRAWAL' %}
+    <form method="post" action="{{ url_for('classify_personal_wallet_transfer', event_id=event.id) }}" class="personal-wallet-out-form">
+      <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="wallet_basis_mode" value="AUTO_CARRY">
+      <input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+      <div><strong>상대 기록 없는 개인 지갑 출금</strong><span>지갑 이름으로 물량과 기존 취득가를 보관합니다. 나중에 같은 지갑에서 입금하면 원가를 승계할 수 있습니다.</span></div>
+      <div class="personal-wallet-out-fields">
+        <label><span>등록한 지갑 선택</span><select name="wallet_account_id" data-wallet-account-select><option value="">직접 입력</option>{% for wallet in personal_wallets if wallet.id %}<option value="{{ wallet.id }}" data-wallet-name="{{ wallet.wallet_name }}" data-wallet-address="{{ wallet.wallet_address }}">{{ wallet.wallet_name }} · {{ wallet.network_name }} · {{ wallet.wallet_address }}</option>{% endfor %}</select><small><a href="{{ url_for('accounts_page') }}">지갑주소 등록에서 추가</a></small></label>
+        <label><span>개인 지갑 이름</span><input type="text" name="wallet_name" maxlength="100" required placeholder="예: MetaMask 메인, Ledger 콜드월렛"></label>
+        <label><span>지갑 주소 (선택)</span><input type="text" name="wallet_address" maxlength="300" placeholder="주소를 입력하면 동일 지갑 식별이 더 정확합니다."></label>
+      </div>
+      <label><span>분류 근거·메모</span><input type="text" name="origin_note" maxlength="500" placeholder="확인한 지갑 또는 TXID 내용을 적으세요 (선택)"></label>
+      <button type="submit">개인 지갑 출금으로 승인</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('review_decision', event_id=event.id) }}" class="review-action-form">
+      <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}">
+      <input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+      <label><span>판정 메모</span><input type="text" name="rationale" maxlength="500" placeholder="선택 근거나 확인한 내용을 남기세요 (선택)"></label>
+      {% if event.event_type == 'WITHDRAWAL' %}
+      <div class="transfer-candidate-control">
+        {% if event.transfer_candidates %}
+        <label><span>연결할 상대 {{ '출금' if event.event_type == 'DEPOSIT' else '입금' }}</span><select name="counterparty_event_id">
+          <option value="">상대 이벤트를 선택하세요</option>
+          {% for candidate in event.transfer_candidates %}<option value="{{ candidate.id }}">{{ candidate.source_type }} · {{ candidate.quantity|group_number }} {{ candidate.asset }} · {{ candidate.occurred_at_utc[:16].replace('T', ' ') if candidate.occurred_at_utc else '시각 미확인' }} UTC · 차이 {{ candidate.fee_quantity|group_number }}{% if candidate.same_txid %} · TXID 일치{% endif %}{% if not candidate.basis_currency_compatible %} · 가격 증빙 필요{% endif %}</option>{% endfor %}
+        </select></label>
+        <small>동일 자산, 출금 이하의 입금 수량, 7일 이내 이벤트를 가까운 순서로 제안합니다.</small>
+        {% else %}<p>연결 가능한 상대 입출금이 없습니다. 상대 거래소 자료를 가져오거나 필터 조건을 확인하세요.</p>{% endif %}
+      </div>
+      {% endif %}
+      <div class="review-actions">
+        <button type="submit" name="decision" value="CONFIRMED">정규화 승인</button>
+        {% if event.event_type == 'WITHDRAWAL' and event.transfer_candidates %}<button type="submit" name="decision" value="INTERNAL_TRANSFER" class="secondary">선택한 입출금 연결</button>{% endif %}
+        <button type="submit" name="decision" value="EXCLUDED" class="danger" onclick="return confirm('이 이벤트를 계산 대상에서 제외할까요? 원본과 판정 이력은 보존됩니다.');">계산 제외</button>
+      </div>
+    </form>
+    {% else %}
+    <div class="review-resolved-row">
+      <div>{% if event.source_type in ('UPBIT', 'BITHUMB') and event.event_type in ('DEPOSIT', 'WITHDRAWAL') and event.asset == 'KRW' %}<strong>은행 인증 KRW 입출금 자동 정규화</strong><span>{{ event.classification_reason }}</span>{% elif event.latest_decision %}<strong>{{ decision_labels.get(event.latest_decision, event.latest_decision) }}</strong><span>{{ event.latest_rationale }} · {{ event.latest_decided_at_utc[:19].replace('T', ' ') }} UTC</span>{% else %}<strong>자동 분류 완료</strong><span>사용자 판정 이력 없음</span>{% endif %}</div>
+      {% if not (event.source_type in ('UPBIT', 'BITHUMB') and event.event_type in ('DEPOSIT', 'WITHDRAWAL') and event.asset == 'KRW') %}
+      <form method="post" action="{{ url_for('review_decision', event_id=event.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="decision" value="REOPENED"><input type="hidden" name="return_status" value="{{ status_filter }}"><input type="hidden" name="return_source" value="{{ source_type }}"><input type="hidden" name="return_event_type" value="{{ event_type }}"><input type="hidden" name="return_dust" value="{{ '1' if dust_only else '' }}"><input type="hidden" name="return_unpriced" value="{{ '1' if unpriced_only else '' }}"><input type="hidden" name="return_page" value="{{ page }}">
+        <button type="submit">다시 검토</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if event.decision_history %}
+    <details class="review-history"><summary>판정 이력 {{ event.decision_history|length }}건</summary><ol>{% for item in event.decision_history %}<li><strong>{{ decision_labels.get(item.decision, item.decision) }}</strong><span>{{ item.rationale }}</span><time>{{ item.decided_at_utc[:19].replace('T', ' ') }} UTC</time></li>{% endfor %}</ol></details>
+    {% endif %}
+    <div class="review-quick-nav"><span>판정이 애매하면 건너뛴 뒤 나중에 다시 확인할 수 있습니다.</span><button type="button" class="review-quick-next">건너뛰고 다음</button></div>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+
+{% if total_pages > 1 %}<nav class="review-pagination" aria-label="검토 목록 페이지">
+  {% if page > 1 %}<a href="{{ url_for('reviews', status=status_filter, source=source_type, event_type=event_type, dust=1 if dust_only else none, unpriced=1 if unpriced_only else none, page=page-1) }}">이전</a>{% endif %}
+  <span>{{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="{{ url_for('reviews', status=status_filter, source=source_type, event_type=event_type, dust=1 if dust_only else none, unpriced=1 if unpriced_only else none, page=page+1) }}">다음</a>{% endif %}
+</nav>{% endif %}
+{% else %}
+<section class="panel empty"><strong>{% if dust_only %}검토할 더스트 트렌젝션이 없습니다.{% elif unpriced_only %}가격을 확인할 이벤트가 없습니다.{% elif status_filter == 'PENDING' %}검토할 이벤트가 없습니다.{% else %}조건에 맞는 이벤트가 없습니다.{% endif %}</strong><span>자료를 가져오거나 다른 필터를 선택해 확인하세요.</span></section>
+{% endif %}
+<script>
+  (() => {
+    const list = document.querySelector('.review-list');
+    if (!list) return;
+    const cards = Array.from(list.querySelectorAll(':scope > .review-card'));
+    const scrollToReviewCard = (card) => {
+      const target = card?.querySelector('.review-card-header') || card;
+      if (!target) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const top = target.getBoundingClientRect().top + window.scrollY - 28;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }));
+    };
+    const openCard = (card) => {
+      cards.forEach((item) => { item.open = item === card; });
+    };
+    cards.forEach((card, index) => {
+      card.addEventListener('toggle', () => {
+        if (card.open) {
+          cards.forEach((item) => { if (item !== card) item.open = false; });
+          scrollToReviewCard(card);
+        }
+      });
+      card.querySelector('.review-quick-next')?.addEventListener('click', () => {
+        const next = cards[index + 1] || cards[0];
+        if (next && next !== card) openCard(next);
+        else card.open = false;
+      });
+      card.querySelectorAll('form').forEach((form) => {
+        form.addEventListener('submit', () => sessionStorage.setItem('coinaccount-review-advance', '1'));
+      });
+    });
+    const initiallyOpen = cards.find((card) => card.open);
+    if (initiallyOpen) scrollToReviewCard(initiallyOpen);
+    const shouldAdvance = sessionStorage.getItem('coinaccount-review-advance') === '1';
+    if (shouldAdvance) {
+      sessionStorage.removeItem('coinaccount-review-advance');
+      if (!list.dataset.selectedEvent && cards[0]) requestAnimationFrame(() => openCard(cards[0]));
+    }
+  })();
+</script>
+{% if unpriced_only %}
+<div id="valuation-loading" class="valuation-loading" role="dialog" aria-modal="true" aria-labelledby="valuation-loading-title" hidden>
+  <div class="valuation-loading-box">
+    <strong id="valuation-loading-title">거래시점 가격을 채우고 있습니다</strong>
+    <small>남은 거래를 순서대로 조회하며 요청 제한 발생 시 자동으로 재시도합니다.</small>
+    <span class="valuation-loading-spinner" aria-hidden="true"></span>
+  </div>
+</div>
+<script>
+  (() => {
+    const form = document.getElementById('valuation-refresh-form');
+    const loading = document.getElementById('valuation-loading');
+    if (!form || !loading) return;
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+      loading.hidden = false;
+      document.body.classList.add('valuation-loading-active');
+      requestAnimationFrame(() => window.setTimeout(() => form.submit(), 50));
+    }, { once: true });
+  })();
+</script>
+{% endif %}
+<script>
+  (() => {
+    document.querySelectorAll('[data-wallet-account-select]').forEach((select) => {
+      const form = select.closest('form');
+      const nameInput = form?.querySelector('input[name="wallet_name"]');
+      const addressInput = form?.querySelector('input[name="wallet_address"]');
+      const applyWallet = () => {
+        const option = select.selectedOptions[0];
+        if (select.value && option) {
+          if (nameInput) nameInput.value = option.dataset.walletName || '';
+          if (addressInput) addressInput.value = option.dataset.walletAddress || '';
+        }
+      };
+      select.addEventListener('change', applyWallet);
+      applyWallet();
+    });
+    document.querySelectorAll('[data-deposit-origin-form]').forEach((form) => {
+      const radios = Array.from(form.querySelectorAll('input[name="origin_type"]'));
+      const sections = Array.from(form.querySelectorAll('[data-origin-fields]'));
+      const internalRadios = Array.from(form.querySelectorAll('input[name="internal_mode"]'));
+      const internalSections = Array.from(form.querySelectorAll('[data-internal-mode-fields]'));
+      const basisRadios = Array.from(form.querySelectorAll('input[name="wallet_basis_mode"]'));
+      const basisSections = Array.from(form.querySelectorAll('[data-wallet-basis-fields]'));
+      const toggleFields = (section, visible) => {
+        section.hidden = !visible;
+        section.querySelectorAll('input, select').forEach((field) => {
+          field.disabled = !visible;
+          field.required = false;
+        });
+      };
+      const updateBasis = () => {
+        const personalSection = internalSections.find((section) => section.dataset.internalModeFields === 'PERSONAL_WALLET');
+        const personalVisible = Boolean(personalSection && !personalSection.hidden);
+        const selectedBasis = basisRadios.find((radio) => radio.checked)?.value || 'AUTO_CARRY';
+        basisSections.forEach((section) => toggleFields(
+          section,
+          personalVisible && section.dataset.walletBasisFields === selectedBasis,
+        ));
+        if (personalVisible) {
+          const walletName = form.querySelector('input[name="wallet_name"]');
+          if (walletName) walletName.required = true;
+          if (selectedBasis === 'MANUAL_BASIS') {
+            const unitCost = form.querySelector('input[name="wallet_unit_cost"]');
+            if (unitCost) unitCost.required = true;
+          }
+        }
+      };
+      const updateInternal = () => {
+        const container = sections.find((section) => section.dataset.originFields.split(' ').includes('INTERNAL_TRANSFER'));
+        const enabled = Boolean(container && !container.hidden);
+        const selectedInternal = internalRadios.find((radio) => radio.checked)?.value || '';
+        internalSections.forEach((section) => toggleFields(
+          section,
+          enabled && section.dataset.internalModeFields === selectedInternal,
+        ));
+        if (enabled && selectedInternal === 'LINKED') {
+          const counterparty = form.querySelector('select[name="counterparty_event_id"]');
+          if (counterparty) counterparty.required = true;
+        }
+        updateBasis();
+      };
+      const updateOrigin = () => {
+        const selected = radios.find((radio) => radio.checked)?.value || '';
+        sections.forEach((section) => {
+          const visible = section.dataset.originFields.split(' ').includes(selected);
+          toggleFields(section, visible);
+        });
+        if (selected === 'EXTERNAL_PURCHASE' || selected === 'OPENING_BALANCE') {
+          const acquiredAt = form.querySelector('input[name="acquired_at_utc"]');
+          const unitCost = form.querySelector('input[name="unit_cost"]');
+          const originName = form.querySelector('input[name="origin_name"]');
+          if (acquiredAt) acquiredAt.required = true;
+          if (unitCost) unitCost.required = true;
+          if (originName) originName.required = selected === 'EXTERNAL_PURCHASE';
+        }
+        updateInternal();
+      };
+      radios.forEach((radio) => radio.addEventListener('change', updateOrigin));
+      internalRadios.forEach((radio) => radio.addEventListener('change', updateInternal));
+      basisRadios.forEach((radio) => radio.addEventListener('change', updateBasis));
+      updateOrigin();
+    });
+  })();
+</script>
+<script>
+  (() => {
+    const dialog = document.getElementById('review-help-dialog');
+    const openButton = document.getElementById('review-help-open');
+    const closeButton = document.getElementById('review-help-close');
+    if (!dialog || !openButton || !closeButton) return;
+    openButton.addEventListener('click', () => dialog.showModal());
+    closeButton.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  })();
+</script>
+{% endblock %}

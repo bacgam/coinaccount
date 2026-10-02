@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}가져오기 충돌 해결함 · 코인어카운트{% endblock %}
+{% block heading %}가져오기 충돌 해결함{% endblock %}
+{% block content %}
+<section class="notice conflict-notice">
+  <strong>기존 판정과 메모를 보호합니다.</strong>
+  <span>같은 거래 ID인데 값이 달라진 행만 모았습니다. 단순 중복 행은 자동으로 제외됩니다.</span>
+</section>
+<nav class="conflict-status-tabs" aria-label="충돌 상태">
+  <a class="{{ 'active' if status == 'PENDING' }}" href="{{ url_for('import_conflicts', status='PENDING') }}">처리 대기 {{ counts.get('PENDING', 0)|group_number }}</a>
+  <a class="{{ 'active' if status == 'KEEP_EXISTING' }}" href="{{ url_for('import_conflicts', status='KEEP_EXISTING') }}">기존 유지 {{ counts.get('KEEP_EXISTING', 0)|group_number }}</a>
+  <a class="{{ 'active' if status == 'ADD_SEPARATE' }}" href="{{ url_for('import_conflicts', status='ADD_SEPARATE') }}">별도 추가 {{ counts.get('ADD_SEPARATE', 0)|group_number }}</a>
+  <a class="{{ 'active' if status == 'ALL' }}" href="{{ url_for('import_conflicts', status='ALL') }}">전체</a>
+</nav>
+{% if conflicts %}
+<section class="conflict-list">
+{% for conflict in conflicts %}
+  <article class="panel conflict-card">
+    <header>
+      <div><span class="source {{ conflict.source_type|lower }}">{{ conflict.source_type }}</span><strong>{{ conflict.identity_kind }} · {{ conflict.identity_value }}</strong></div>
+      <small>{{ conflict.original_filename }} · {{ conflict.source_row_number }}행</small>
+    </header>
+    {% if conflict.differences %}
+    <div class="table-wrap"><table class="conflict-diff-table">
+      <thead><tr><th>변경 항목</th><th>기존 값</th><th>새 파일 값</th></tr></thead>
+      <tbody>{% for difference in conflict.differences %}<tr><th>{{ difference.field }}</th><td>{{ difference.existing or '—' }}</td><td class="incoming">{{ difference.incoming or '—' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if conflict.status == 'PENDING' %}
+    <form method="post" action="{{ url_for('resolve_import_conflict', conflict_id=conflict.id) }}" class="conflict-actions">
+      <input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}">
+      <input name="note" placeholder="처리 근거 메모 (선택)">
+      <button type="submit" name="action" value="KEEP_EXISTING" class="outline">기존 거래 유지</button>
+      <button type="submit" name="action" value="ADD_SEPARATE" onclick="return confirm('같은 거래 ID를 가진 별도 거래로 추가할까요? 실제로 서로 다른 거래일 때만 사용하세요.');">별도 거래로 추가</button>
+    </form>
+    {% else %}<p class="conflict-resolution">{{ '기존 거래 유지' if conflict.status == 'KEEP_EXISTING' else '별도 거래로 추가' }}{% if conflict.resolution_note %} · {{ conflict.resolution_note }}{% endif %}</p>{% endif %}
+  </article>
+{% endfor %}
+</section>
+{% else %}<section class="panel empty"><strong>이 상태의 충돌 거래가 없습니다.</strong><span>새 파일을 가져오면 충돌 거래가 자동으로 이곳에 모입니다.</span></section>{% endif %}
+{% endblock %}

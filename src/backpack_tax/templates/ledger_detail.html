@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}원장 이벤트 #{{ event.id }} · 코인어카운트{% endblock %}
+{% block heading %}원장 이벤트 #{{ event.id }}{% endblock %}
+{% block content %}
+<section class="notice"><strong>{{ event.source_type }} · {{ event.asset or '-' }}</strong><span>{{ event_labels.get(event.event_type, event.event_type) }} · {{ event.occurred_at_utc or '시각 미확인' }}</span></section>
+<section class="panel ledger-detail-grid">{% for label, value in [('판정', event.classification_status), ('수량', event.quantity), ('단가', event.unit_price), ('거래금액', event.gross_amount), ('수수료 자산', event.fee_asset), ('수수료 수량', event.fee_quantity), ('TXID', event.txid), ('보낸 주소', event.from_address), ('받는 주소', event.to_address), ('네트워크', event.network), ('원본 파일', event.original_filename), ('원본 행', event.source_row_number), ('판정 사유', event.classification_reason), ('최근 결정', event.latest_decision), ('결정 메모', event.latest_rationale)] %}<div><span>{{ label }}</span><strong>{{ value if value not in (none, '') else '-' }}</strong></div>{% endfor %}</section>
+{% if event.raw_json %}<details class="panel ledger-raw"><summary>원본 행 JSON 보기</summary><pre>{{ event.raw_json }}</pre></details>{% endif %}<div class="health-footer-actions"><a href="{{ url_for('ledger', exchange=event.source_type) }}">원장으로 돌아가기</a>{% if event.classification_status == 'NEEDS_REVIEW' %}<a class="outline" href="{{ url_for('reviews', status='ALL', event_id=event.id) }}">검토센터에서 처리</a>{% endif %}</div>
+{% endblock %}

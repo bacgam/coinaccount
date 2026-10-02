@@ -1,0 +1,12 @@
+cryptography<51,>=46
+Flask<4,>=3.1
+Pillow<13,>=12.3
+openpyxl<4,>=3.1.5
+pypdf<7,>=6.16
+python-dotenv<2,>=1.1
+requests<3,>=2.32
+tzdata<2027,>=2026.3
+websockets<18,>=17
+
+[dev]
+pytest

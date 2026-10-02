@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}입출금 묶음 검토 · 코인어카운트{% endblock %}
+{% block heading %}입출금 묶음 검토{% endblock %}
+{% block content %}
+<div class="transfer-batch-intro">
+  <div><h2>{{ queue.total|group_number }}건을 묶어서 확인하세요</h2><p>연결 가능한 이동부터 확인하고, 나머지는 같은 주소의 거래를 한 번에 정리하세요.</p></div>
+  <a href="{{ url_for('reviews') }}">개별 검토로 돌아가기</a>
+</div>
+<nav class="transfer-batch-summary" aria-label="묶음 검토 순서">
+  <a href="#transfer-pairs"><span>1. 거래소 간 이동 후보</span><strong>{{ queue.pairs|length }}쌍 <small>· {{ queue.pairs|length * 2 }}건</small></strong></a>
+  <a href="#transfer-wallets"><span>2. 주소·거래 유형별 묶음</span><strong>{{ queue.groups|length }}묶음 <small>· {{ queue.grouped_count }}건</small></strong></a>
+</nav>
+<section id="transfer-pairs" class="panel transfer-batch-panel">
+  <h2>거래소 간 이동 후보를 확인하세요</h2>
+  <p class="muted">같은 자산의 출금 후 30분 이내 입금 중, 수량 차이가 기록된 수수료와 같거나 0.1% 이하이고 서로 다른 후보가 겹치지 않는 쌍입니다. 시간·수량이 비슷해도 같은 이동이라는 보장은 없으므로 본인 거래인지 확인해 선택하세요.</p>
+  {% if queue.pairs %}
+  <form method="post" action="{{ url_for('apply_review_transfers') }}" class="transfer-batch-form" data-batch-kind="pairs">
+    <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="mode" value="PAIRS"><input type="hidden" name="snapshot" value="{{ queue.pair_key }}">
+    <label class="transfer-batch-select"><input type="checkbox" data-select-all> 이동 후보 전체 선택 ({{ queue.pairs|length }}쌍)</label>
+    <div class="table-wrap" role="region" aria-label="거래소 간 이동 후보 목록" tabindex="0"><table class="transfer-batch-table"><thead><tr><th>선택</th><th>자산</th><th>출금 → 입금 · 한국시간</th><th>출금 / 입금 수량</th><th>연결 근거</th></tr></thead><tbody>
+    {% for pair in queue.pairs %}<tr>
+      <td><input type="checkbox" name="selected" value="{{ pair.id }}" aria-label="{{ pair.withdrawal.asset }} {{ pair.withdrawal.time_display }} 이동 선택"></td>
+      <td><strong>{{ pair.withdrawal.asset }}</strong></td>
+      <td><a href="{{ url_for('reviews', event_id=pair.withdrawal.id) }}">{{ exchanges.get(pair.withdrawal.source_type, pair.withdrawal.source_type) }} {{ pair.withdrawal.time_display }}</a><span>↓ {{ pair.minutes }}분 후</span><a href="{{ url_for('reviews', event_id=pair.deposit.id) }}">{{ exchanges.get(pair.deposit.source_type, pair.deposit.source_type) }} {{ pair.deposit.time_display }}</a></td>
+      <td>{{ pair.withdrawal.quantity|group_number }} / {{ pair.deposit.quantity|group_number }}<span>수량 차이 {{ pair.difference|group_number }}</span></td>
+      <td>{{ pair.evidence }}<span>{{ pair.withdrawal.network or '출금 네트워크 미기록' }} → {{ pair.deposit.network or '입금 네트워크 미기록' }}</span>{% if pair.cross_currency %}<span class="transfer-batch-warning">통화가 달라 취득가 가격 증빙이 추가로 필요할 수 있음</span>{% endif %}</td>
+    </tr>{% endfor %}
+    </tbody></table></div>
+    <div class="transfer-batch-submit"><label><input type="checkbox" name="ownership_confirmed" value="1" required> 선택한 쌍이 모두 내 거래소 계정 사이의 같은 이동임을 확인했습니다.</label><button type="submit" disabled data-batch-submit>이동 후보를 선택하세요</button></div>
+  </form>
+  {% else %}<p class="transfer-batch-empty">현재 조건으로 연결할 수 있는 쌍이 없습니다. 아래에서 주소별로 묶어서 확인하거나 개별 검토에서 상대 거래를 선택하세요.</p>{% endif %}
+</section>
+<section id="transfer-wallets" class="transfer-wallet-groups">
+  <h2>같은 주소의 거래는 지갑을 한 번만 지정하세요</h2>
+  <p class="muted">기록된 주소별로 모았습니다. 내 개인 지갑으로 오간 거래만 선택하세요. 주소가 없는 거래는 거래소·자산·입출금 유형별로 표시하며, 같은 지갑의 거래라고 추정하지 않습니다.</p>
+  <p class="transfer-batch-warning">거래소 주소나 외부에서 구매한 코인은 개별 검토로 분류하세요. 개인 지갑 이동으로 저장해도 과거 원가가 없으면 취득가 미확인으로 남습니다.</p>
+  {% for group in queue.groups %}
+  <details class="panel transfer-wallet-group">
+    <summary><div><strong>{{ group.count|group_number }}건 <span>입금 {{ group.deposits }} · 출금 {{ group.withdrawals }}</span></strong><p>{{ group.assets }} · {% for source in group.sources %}{{ exchanges.get(source, source) }}{{ ' / ' if not loop.last }}{% endfor %}</p><small>{{ group.network or '네트워크 미기록' }} · {{ group.address or '주소 미기록 — 거래 내용을 확인해 선택하세요' }}</small></div><span class="transfer-group-toggle" aria-hidden="true"></span></summary>
+    <form method="post" action="{{ url_for('apply_review_transfers') }}" class="transfer-batch-form" data-batch-kind="wallet">
+      <input type="hidden" name="csrf_token" value="{{ review_csrf_token }}"><input type="hidden" name="mode" value="WALLET"><input type="hidden" name="snapshot" value="{{ group.key }}">
+      <label class="transfer-batch-select"><input type="checkbox" data-select-all> 이 묶음 전체 선택 ({{ group.count }}건)</label>
+      <div class="table-wrap" role="region" aria-label="이 묶음의 거래 목록" tabindex="0"><table class="transfer-batch-table"><thead><tr><th>선택</th><th>한국시간</th><th>거래소</th><th>구분</th><th>자산·수량</th><th>상세</th></tr></thead><tbody>
+      {% for event in group.events %}<tr><td><input type="checkbox" name="selected" value="{{ event.id }}" aria-label="{{ event.asset }} {{ event.time_display }} 거래 선택"></td><td>{{ event.time_display }}</td><td>{{ exchanges.get(event.source_type, event.source_type) }}</td><td>{{ '입금' if event.event_type == 'DEPOSIT' else '출금' }}</td><td>{{ event.asset }} {{ event.quantity|group_number }}</td><td><a href="{{ url_for('reviews', event_id=event.id) }}">개별 검토</a></td></tr>{% endfor %}
+      </tbody></table></div>
+      <div class="transfer-wallet-inputs">
+        <label>어느 개인 지갑과 오간 거래인가요?<select name="wallet_account_id" data-batch-wallet><option value="">지갑 직접 입력</option>{% for wallet in wallets if wallet.id %}<option value="{{ wallet.id }}">{{ wallet.wallet_name }} · {{ wallet.network_name }} · {{ wallet.wallet_address }}</option>{% endfor %}</select></label>
+        <div data-batch-wallet-fields><label>내 개인 지갑 이름<input name="wallet_name" maxlength="100" required placeholder="예: 내 MetaMask"></label><label>내 개인 지갑 주소<input name="wallet_address" maxlength="300" required placeholder="본인 지갑의 주소를 입력하세요"></label></div>
+      </div>
+      <div class="transfer-batch-submit"><label><input type="checkbox" name="ownership_confirmed" value="1" required> 선택한 거래는 모두 위 개인 지갑과 오간 내 자산의 이동입니다.</label><button type="submit" disabled data-batch-submit>거래를 선택하세요</button></div>
+    </form>
+  </details>
+  {% else %}<p class="transfer-batch-empty">주소별로 확인할 거래가 없습니다.</p>{% endfor %}
+</section>
+<script>
+document.querySelectorAll('.transfer-batch-form').forEach(form => {
+  const selections = [...form.querySelectorAll('input[name="selected"]')];
+  const selectAll = form.querySelector('[data-select-all]');
+  const submit = form.querySelector('[data-batch-submit]');
+  function updateSelection() {
+    const count = selections.filter(input => input.checked).length;
+    selectAll.checked = count === selections.length;
+    selectAll.indeterminate = count > 0 && count < selections.length;
+    submit.disabled = count === 0;
+    submit.textContent = count ? (form.dataset.batchKind === 'pairs' ? `선택한 ${count}쌍 (${count * 2}건) 이동으로 연결` : `선택한 ${count}건 개인 지갑 이동으로 저장`) : '처리할 거래를 선택하세요';
+  }
+  selectAll.addEventListener('change', () => { selections.forEach(input => { input.checked = selectAll.checked; }); updateSelection(); });
+  selections.forEach(input => input.addEventListener('change', updateSelection));
+  const wallet = form.querySelector('[data-batch-wallet]');
+  if (wallet) {
+    function updateWallet() {
+      const fields = form.querySelector('[data-batch-wallet-fields]');
+      fields.hidden = Boolean(wallet.value);
+      fields.querySelectorAll('input').forEach(input => { input.required = !wallet.value; input.disabled = Boolean(wallet.value); });
+    }
+    wallet.addEventListener('change', updateWallet);
+    updateWallet();
+  }
+  updateSelection();
+});
+</script>
+{% endblock %}

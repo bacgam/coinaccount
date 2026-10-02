@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}데이터 건강검진 · 코인어카운트{% endblock %}
+{% block heading %}데이터 건강검진{% endblock %}
+{% block content %}
+<section class="notice health-intro"><div><strong>원장 무결성 자동 점검</strong><span>판정 상태, 취득가, 입출금 분류와 미확인 PNL을 읽기 전용으로 검사했습니다. 검사 자체는 원장 데이터를 변경하지 않습니다.</span></div><a href="{{ url_for('review_health') }}">다시 검사</a></section>
+<section class="health-summary">
+  <article class="{{ 'healthy' if health.summary.critical == 0 and health.summary.warnings == 0 else 'attention' }}"><span>종합 상태</span><strong>{% if health.summary.critical %}수정 필요{% elif health.summary.warnings %}주의 필요{% else %}정상{% endif %}</strong><small>{{ health.generated_at_utc[:19].replace('T', ' ') }} UTC</small></article>
+  <article><span>통과</span><strong>{{ health.summary.passed }}</strong><small>{{ health.summary.checks }}개 검사 중</small></article>
+  <article class="critical"><span>수정 필요</span><strong>{{ health.summary.critical }}</strong><small>즉시 확인할 검사</small></article>
+  <article class="warning"><span>주의</span><strong>{{ health.summary.warnings }}</strong><small>확인이 필요한 검사</small></article>
+</section>
+<section class="health-check-list">
+{% for check in health.checks %}
+  <article class="panel health-check {{ check.status|lower }}">
+    <header><div><span class="health-status {{ check.status|lower }}">{% if check.status == 'PASS' %}정상{% elif check.status == 'CRITICAL' %}수정 필요{% else %}주의{% endif %}</span><h2>{{ check.title }}</h2></div><strong>{{ '{:,}'.format(check.count) }}건</strong></header>
+    <p>{{ check.description }}</p>
+    {% if check.count %}<div class="health-action"><strong>권장 조치</strong><span>{{ check.action }}</span></div>{% endif %}
+    {% if check['items'] %}<div class="health-item-list">
+      {% for item in check['items'] %}<div class="health-item"><div><strong>{{ item.source_type }} · {{ item.asset }}</strong><span>{{ event_labels.get(item.event_type, item.event_type) }} · {{ item.occurred_at_utc[:19].replace('T', ' ') }}</span><small>{{ item.detail }}</small></div>{% if item.event_id %}<a href="{{ url_for('reviews', status='ALL', event_id=item.event_id) }}">이벤트 보기</a>{% elif item.review_asset %}<a href="{{ url_for('reviews', status='PENDING', source=item.source_type, event_type='DEPOSIT', asset=item.review_asset) }}">외부입금 취득가 입력</a>{% elif item.asset_link %}<a href="{{ url_for('assets', exchange=item.source_type) }}">손익 보기</a>{% elif item.file_id %}<a href="{{ url_for('imports_page') }}">원본 관리</a>{% endif %}</div>{% endfor %}
+    </div>{% if check.truncated %}<small class="health-truncated">상위 {{ check['items']|length }}건만 표시했습니다.</small>{% endif %}{% endif %}
+  </article>
+{% endfor %}
+</section>
+<div class="health-footer-actions"><a href="{{ url_for('reviews', status='PENDING') }}">검토센터에서 처리</a></div>
+{% endblock %}

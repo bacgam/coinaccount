@@ -1,0 +1,3 @@
+[console_scripts]
+backpack-bot = backpack_bot.cli:main
+backpack-tax = backpack_tax.app:main

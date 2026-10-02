@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}가져오기 미리보기 · 코인어카운트{% endblock %}
+{% block heading %}자료 가져오기 미리보기{% endblock %}
+{% block content %}
+<section class="notice"><strong>아직 원장에 반영되지 않았습니다</strong><span>신규 행만 가져오며, 기존과 같은 행과 고유 ID가 충돌하는 행은 건너뜁니다.</span></section>
+<section class="panel import-preview-file"><div><p class="eyebrow">IMPORT PREVIEW</p><h2>{{ preview.filename }}</h2><p class="muted">{{ preview.source_type }} · {{ preview.document_type }}</p></div></section>
+<section class="import-preview-summary">
+  <article class="total"><span>전체 행</span><strong>{{ analysis.total|group_number }}</strong></article>
+  <article class="new"><span>신규</span><strong>{{ analysis.new|group_number }}</strong><small>가져오기 대상</small></article>
+  <article class="duplicate"><span>중복</span><strong>{{ analysis.duplicate|group_number }}</strong><small>자동 건너뜀</small></article>
+  <article class="conflict"><span>충돌</span><strong>{{ analysis.conflict|group_number }}</strong><small>확인 전까지 제외</small></article>
+</section>
+{% if analysis.conflict_samples %}<section class="panel table-panel import-conflicts"><div class="panel-title"><div><p class="eyebrow">CONFLICTS</p><h2>고유 ID 충돌 예시</h2></div><span class="muted">상위 {{ analysis.conflict_samples|length }}건</span></div><div class="table-wrap"><table><thead><tr><th>원본 행</th><th>식별자 종류</th><th>식별자</th></tr></thead><tbody>{% for item in analysis.conflict_samples %}<tr><td>{{ item.row }}</td><td>{{ item.key }}</td><td><code>{{ item.value }}</code></td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+<section class="import-preview-actions">
+  <form method="post" action="{{ url_for('confirm_import_preview', token=token) }}">
+    <input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}">
+    {% if preview.source_type == 'UPBIT' %}<label>업비트 PDF 비밀번호<input type="password" name="pdf_password" required autocomplete="off"><small>비밀번호는 저장하지 않으므로 확정할 때 다시 입력합니다.</small></label>{% endif %}
+    <button type="submit" {{ 'disabled' if analysis.new == 0 }}>신규 {{ analysis.new|group_number }}건만 가져오기</button>
+  </form>
+  <form method="post" action="{{ url_for('cancel_import_preview', token=token) }}"><input type="hidden" name="csrf_token" value="{{ delete_csrf_token }}"><button type="submit" class="outline">취소</button></form>
+</section>
+{% endblock %}
